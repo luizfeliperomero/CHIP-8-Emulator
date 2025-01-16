@@ -8,8 +8,7 @@ enum Instruction {
     Jump(u16),
     SkipEqual(),
     Load(),
-    Display(),
-    Add()
+    Display([[bool; WIDTH as usize]; HEIGHT as usize])
 }
 
 pub struct CPU {
@@ -64,12 +63,6 @@ impl CPU {
                 self.increment_pc();
                 Instruction::Load()
             }
-            0x7 => {
-                let x = Self::get_rightmost_nibble(lhs);
-                self.v[x as usize] += rhs;
-                self.increment_pc();
-                Instruction::Add()
-            }
             0xA => {
                 let address = (((Self::get_rightmost_nibble(lhs)) as u16) << 8) | rhs as u16;
                 self.i = address;
@@ -85,17 +78,10 @@ impl CPU {
                         let sprite_bit = (self.memory.memory[self.i as usize + index as usize] >> (7 - bit)) & 1 != 0;
                         let screen_x = (self.v[x as usize] as usize + bit) % (WIDTH as usize);
                         let screen_y = (self.v[y as usize] as usize + (index as usize)) % (HEIGHT as usize);
-                        let display_bit = self.display.pixels[screen_x][screen_y]; 
                         self.display.pixels[screen_x][screen_y] ^= sprite_bit;
-                        if display_bit && sprite_bit {
-                            self.v[15] = 1;
-                        } else {
-                            self.v[15] = 0;
-                        }
                     }
                 }
-                self.increment_pc();
-                Instruction::Display()
+                Instruction::Display(self.display.pixels)
             }
             _ => {
                 unimplemented!("UNIMPLEMENTED OPCODE: {:X?}", op)

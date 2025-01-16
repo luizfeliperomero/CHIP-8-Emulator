@@ -1,7 +1,9 @@
 mod memory;
-use memory::Memory;
 mod cpu;
+mod display;
+use memory::Memory;
 use cpu::CPU;
+use display::Display;
 
 fn main() {
     let mut memory = Memory::new();
@@ -14,6 +16,7 @@ fn main() {
             panic!("{e}: {rom}");
         }
     }
-    let mut cpu = CPU::new(memory);
+    let display = Display::default();
+    let mut cpu = CPU::new(memory, display);
     cpu.run();
 }
