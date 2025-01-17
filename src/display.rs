@@ -15,7 +15,7 @@ pub struct Display {
     pub title: String,
     pub pixels: [[bool; WIDTH as usize]; HEIGHT as usize],
     canvas: Canvas<Window>,
-    event_pump: EventPump
+    pub event_pump: EventPump
 }
 
 impl Default for Display {
@@ -44,13 +44,6 @@ impl Default for Display {
 
 impl Display {
     pub fn draw(&mut self) {
-        for event in self.event_pump.poll_iter() {
-            match event {
-                Event::Quit { .. } => break,
-                Event::KeyDown { keycode: Some(Keycode::Escape), .. } => break,
-                _ => {}
-            }
-        }
         self.canvas.set_draw_color(Color::BLACK);
         self.canvas.clear(); 
         self.canvas.set_draw_color(Color::WHITE);

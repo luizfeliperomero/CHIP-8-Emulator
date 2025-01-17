@@ -1,6 +1,7 @@
 mod memory;
 mod cpu;
 mod display;
+mod keyboard;
 use memory::Memory;
 use cpu::CPU;
 use display::Display;

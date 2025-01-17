@@ -2,6 +2,8 @@ use crate::memory::Memory;
 use crate::display::Display;
 use crate::display::HEIGHT;
 use crate::display::WIDTH;
+use crate::keyboard::{KEYS, map_key_to_u8};
+use sdl2::event::Event;
 
 #[derive(Debug)]
 enum Instruction {
@@ -17,6 +19,8 @@ pub struct CPU {
     i: u16,
     pc: u16,
     sp: u8,
+    dt: u8,
+    st: u8,
     memory: Memory,
     display: Display
 }
@@ -28,6 +32,8 @@ impl CPU {
            i: 0,
            pc: 0x200,
            sp: 0,
+           dt: 0,
+           st: 0,
            memory,
            display
        } 
@@ -47,6 +53,15 @@ impl CPU {
                 let address = (((Self::get_rightmost_nibble(lhs)) as u16) << 8) | rhs as u16;
                 self.pc = address;
                 Instruction::Jump(address)
+            }
+            0x3 => {
+                let x = Self::get_rightmost_nibble(lhs);
+                if self.v[x as usize] == rhs {
+                    self.pc += 4;
+                } else {
+                    self.increment_pc();
+                }
+                Instruction::SkipEqual()
             }
             0x5 => {
                 let x = Self::get_rightmost_nibble(lhs);
@@ -96,6 +111,52 @@ impl CPU {
                 }
                 self.increment_pc();
                 Instruction::Display()
+            }
+            0xF => {
+                match rhs {
+                    0x7 => {
+                        let x = Self::get_rightmost_nibble(lhs);
+                        self.v[x as usize] = self.dt;
+                        self.increment_pc();
+                        Instruction::Load()
+                    }
+                    0xA => {
+                        loop {
+                            for event in self.display.event_pump.poll_iter() {
+                                match event {
+                                    Event::KeyDown { keycode: Some(key), .. } => {
+                                        let x = Self::get_leftmost_nibble(lhs); 
+                                        self.v[x as usize] = map_key_to_u8(key).unwrap();
+                                        self.increment_pc();
+                                        return Instruction::Load();
+                                    },
+                                    _ => {}
+                                }
+                            }
+                        }
+                    }
+                    0x15 => {
+                        let x = Self::get_leftmost_nibble(lhs); 
+                        self.dt = self.v[x as usize];
+                        self.increment_pc();
+                        Instruction::Load()
+                    }
+                    0x18 => {
+                        let x = Self::get_leftmost_nibble(lhs); 
+                        self.st = self.v[x as usize];
+                        self.increment_pc();
+                        Instruction::Load()
+                    }
+                    0x1E => {
+                        let x = Self::get_leftmost_nibble(lhs); 
+                        self.i += self.v[x as usize] as u16;
+                        self.increment_pc();
+                        Instruction::Add()
+                    }
+                    _ => {
+                        unimplemented!("UNIMPLEMENTED OPCODE: {:X?}", op)
+                    }
+                }
             }
             _ => {
                 unimplemented!("UNIMPLEMENTED OPCODE: {:X?}", op)
