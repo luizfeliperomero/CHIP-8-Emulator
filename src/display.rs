@@ -1,21 +1,29 @@
 use sdl2::pixels::Color;
-use sdl2::event::Event;
-use sdl2::keyboard::Keycode;
-use sdl2::rect::Rect;
 use sdl2::video::Window;
 use sdl2::render::Canvas;
 use sdl2::EventPump;
-use std::time::Duration;
+use sdl2::pixels::PixelFormatEnum;
+use std::time::{Duration, Instant};
 
-const SCALE_FACTOR: u32 = 30;
-pub const WIDTH: u32 = 64 * SCALE_FACTOR;
-pub const HEIGHT: u32 = 32 * SCALE_FACTOR;
+pub const WIDTH: usize = 64;
+pub const HEIGHT: usize = 32;
+const FPS: u64 = 60;
+
+pub trait DisplayTrait {
+    fn draw(&mut self) -> bool;
+    fn clear(&mut self);
+    fn get_pixels(&self) -> [u8; WIDTH * HEIGHT * 3 ];
+    fn set_pixels(&mut self, value: [u8; WIDTH * HEIGHT * 3 ]);
+    fn get_pixel(&self, index: usize) -> u8;
+    fn set_pixel(&mut self, index: usize, value: u8);
+}
 
 pub struct Display {
     pub title: String,
-    pub pixels: [[bool; WIDTH as usize]; HEIGHT as usize],
+    pixels: [u8; WIDTH * HEIGHT * 3 ],
     canvas: Canvas<Window>,
-    pub event_pump: EventPump
+    pub event_pump: EventPump,
+    pub last_updated: Instant
 }
 
 impl Default for Display {
@@ -25,9 +33,10 @@ impl Default for Display {
         let video_subsystem = sdl_context.video().unwrap();
         let window = video_subsystem.window(
             title.as_str(),
-            WIDTH,
-            HEIGHT
+            640,
+            480 
         )
+        .opengl()
         .position_centered()
         .build()
         .unwrap();
@@ -35,33 +44,45 @@ impl Default for Display {
         let event_pump = sdl_context.event_pump().unwrap();
         Self {
             title,
-            pixels: [[false; WIDTH as usize]; HEIGHT as usize],
+            pixels: [0; WIDTH * HEIGHT * 3 ],
             canvas,
-            event_pump
+            event_pump,
+            last_updated: Instant::now()
         }
     }
 }
 
-impl Display {
-    pub fn draw(&mut self) {
-        self.canvas.set_draw_color(Color::BLACK);
-        self.canvas.clear(); 
-        self.canvas.set_draw_color(Color::WHITE);
-        for y in 0..HEIGHT{
-            for x in 0..WIDTH{
-                if self.pixels[y as usize][x as usize] {
-                    let rect = Rect::new(
-                        (x as u32 * SCALE_FACTOR) as i32,
-                        (y as u32 * SCALE_FACTOR) as i32,
-                        SCALE_FACTOR,
-                        SCALE_FACTOR,
-                    );
-                    self.canvas.fill_rect(rect).unwrap();
-                }
-            }
+impl DisplayTrait for Display {
+    fn draw(&mut self) -> bool {
+        let now = Instant::now();
+        if now.duration_since(self.last_updated) >= Duration::from_millis(1000 / FPS) {
+            self.canvas.set_draw_color(Color::BLACK);
+            self.canvas.clear(); 
+            self.canvas.set_draw_color(Color::WHITE);
+            let texture_creator = self.canvas.texture_creator();
+            let mut texture = texture_creator.create_texture_streaming(PixelFormatEnum::RGB888, WIDTH as u32, HEIGHT as u32).expect("Couldn't create texture");
+            let _ = texture.update(None, &self.pixels, WIDTH * 3);
+            let _ = self.canvas.copy(&texture, None, None);
+            self.canvas.present();
+            self.last_updated = Instant::now();
+            return true;
         }
-        self.canvas.present();
-        ::std::thread::sleep(Duration::from_millis(16));
+        false
+    }
+    fn clear(&mut self) {
+        self.pixels = [0; WIDTH * HEIGHT * 3 ];
+    }
+    fn get_pixels(&self) -> [u8; WIDTH * HEIGHT * 3 ] {
+        self.pixels
+    }
+    fn set_pixels(&mut self, value: [u8; WIDTH * HEIGHT * 3 ]) {
+        self.pixels = value;
+    }
+    fn get_pixel(&self, index: usize) -> u8 {
+        self.pixels[index]
+    }
+    fn set_pixel(&mut self, index: usize, value: u8) {
+        self.pixels[index] = value;
     }
 }
 
