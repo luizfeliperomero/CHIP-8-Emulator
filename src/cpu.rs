@@ -1,11 +1,12 @@
-use crate::memory::Memory;
 use crate::display::DisplayTrait;
 use crate::display::HEIGHT;
 use crate::display::WIDTH;
-use crate::keyboard::{KEYS, map_key_to_u8, Keyboard};
+use crate::keyboard::{map_key_to_u8, Keyboard, KEYS};
+use crate::memory::Memory;
+use sdl2::Sdl;
+use rand::Rng;
 use sdl2;
 use sdl2::event::Event;
-use rand::Rng;
 
 #[derive(Debug)]
 enum Instruction {
@@ -39,61 +40,57 @@ pub struct CPU<D: DisplayTrait> {
     st: u8,
     memory: Memory,
     display: D,
-    keyboard: Keyboard
+    keyboard: Keyboard,
+    waiting_key: bool
 }
 
 impl<D: DisplayTrait> CPU<D> {
     pub fn new(memory: Memory, display: D, keyboard: Keyboard) -> Self {
-       Self {
-           v: [0; 16],
-           i: 0,
-           pc: 0x200,
-           sp: 0,
-           dt: 0,
-           st: 0,
-           memory,
-           display,
-           keyboard
-       } 
+        Self {
+            v: [0; 16],
+            i: 0,
+            pc: 0x200,
+            sp: 0,
+            dt: 0,
+            st: 0,
+            memory,
+            display,
+            keyboard,
+            waiting_key: false,
+        }
     }
-    pub fn run(&mut self) {
+    pub fn run(&mut self, sdl_context: &Sdl) {
         loop {
+            self.keyboard.update(sdl_context);
+            if self.waiting_key && self.keyboard.is_any_pressed() {
+                self.increment_pc();
+                self.waiting_key = false;
+            }
             if self.display.draw() {
                 let lhs = self.memory.memory[self.pc as usize];
                 let rhs = self.memory.memory[(self.pc + 1) as usize];
                 self.decode(lhs, rhs);
             }
-            /*for event in self.display.event_pump.poll_iter() {
-                match event {
-                    Event::Quit {..} |
-                        Event::KeyDown { keycode: Some(sdl2::keyboard::Keycode::Escape), .. } => {
-                           return 
-                        },
-                    _ => {}
-                }
-            }*/
         }
     }
     fn decode(&mut self, lhs: u8, rhs: u8) -> Instruction {
         let op = Self::get_leftmost_nibble(lhs);
         match op {
-            0x0 => {
-                match rhs {
-                    0xE0 => {
-                        self.display.clear();
-                        self.increment_pc();
-                        Instruction::CLS
-                    }
-                    0xEE => {
-                        self.pc = self.memory.stack[self.sp as usize];
-                        self.sp -= 1;
-                        Instruction::RET
-                    }
-                    _ => {
-                        unimplemented!("Unimplemented OPCODE FOR 0");
-                    }
+            0x0 => match rhs {
+                0xE0 => {
+                    self.display.clear();
+                    self.increment_pc();
+                    Instruction::CLS
                 }
-            }
+                0xEE => {
+                    self.pc = self.memory.stack[self.sp as usize];
+                    self.sp -= 1;
+                    Instruction::RET
+                }
+                _ => {
+                    unimplemented!("Unimplemented OPCODE FOR 0");
+                }
+            },
             0x1 => {
                 let address = (((Self::get_rightmost_nibble(lhs)) as u16) << 8) | rhs as u16;
                 self.pc = address;
@@ -148,7 +145,7 @@ impl<D: DisplayTrait> CPU<D> {
             }
             0x8 => {
                 let n = Self::get_rightmost_nibble(rhs);
-                match n  {
+                match n {
                     0x0 => {
                         let x = Self::get_rightmost_nibble(lhs);
                         let y = Self::get_leftmost_nibble(rhs);
@@ -159,7 +156,7 @@ impl<D: DisplayTrait> CPU<D> {
                     0x1 => {
                         let x = Self::get_rightmost_nibble(lhs);
                         let y = Self::get_leftmost_nibble(rhs);
-                        self.v[x as usize] |=  self.v[y as usize];
+                        self.v[x as usize] |= self.v[y as usize];
                         self.increment_pc();
                         Instruction::Or
                     }
@@ -182,11 +179,7 @@ impl<D: DisplayTrait> CPU<D> {
                         let y = Self::get_leftmost_nibble(rhs);
                         let vx = self.v[x as usize] as u16 + self.v[y as usize] as u16;
                         self.v[x as usize] = vx as u8;
-                        self.v[0xF] = if vx > 0xFF {
-                            1
-                        } else {
-                            0
-                        };
+                        self.v[0xF] = if vx > 0xFF { 1 } else { 0 };
                         self.increment_pc();
                         Instruction::Add
                     }
@@ -217,7 +210,7 @@ impl<D: DisplayTrait> CPU<D> {
                         } else {
                             0
                         };
-                        self.v[x as usize] =  self.v[y as usize] - self.v[x as usize];
+                        self.v[x as usize] = self.v[y as usize] - self.v[x as usize];
                         self.increment_pc();
                         Instruction::SubN
                     }
@@ -250,7 +243,8 @@ impl<D: DisplayTrait> CPU<D> {
                 Instruction::Load
             }
             0xB => {
-                let address = ((((Self::get_rightmost_nibble(lhs)) as u16) << 8) | rhs as u16) + self.v[0] as u16;
+                let address = ((((Self::get_rightmost_nibble(lhs)) as u16) << 8) | rhs as u16)
+                    + self.v[0] as u16;
                 self.pc = address;
                 Instruction::Jump(address)
             }
@@ -267,25 +261,23 @@ impl<D: DisplayTrait> CPU<D> {
                 let y = Self::get_leftmost_nibble(rhs);
                 let mut vy = self.v[y as usize];
                 for sprite_index in self.i..(self.i + n as u16) {
-                    let start_index: usize = sprite_index as usize; 
+                    let start_index: usize = sprite_index as usize;
                     let mut vf_changed = false;
                     if vy as usize > HEIGHT {
                         vy = 0;
                     }
                     let sprite_row = self.memory.memory[start_index];
+                    let mut vx = self.v[x as usize];
+                    if vx as usize > WIDTH {
+                        vx = 0;
+                    }
                     for b in 0..8 {
-                        let mut vx = self.v[x as usize] + b;
-                        if vx as usize > WIDTH {
-                            vx = 0;
-                        }
-                        let pixel_index: usize = ((vy as usize * WIDTH * 3) + (vx as usize * 3)) as usize;
+                        let pixel_index: usize =
+                            ((vy as usize * WIDTH * 3) + ((vx as usize + b) * 3)) as usize;
+                        assert_eq!(pixel_index % 3, 0);
                         let old_pixel = self.display.get_pixel(pixel_index);
                         let new_pixel = sprite_row & (0b1000_0000 >> b);
-                        let new_pixel = if new_pixel != 0 {
-                            0xFF
-                        } else {
-                            0x00
-                        };
+                        let new_pixel = if new_pixel != 0 { 0xFF } else { 0x00 };
                         let new_pixel = new_pixel ^ old_pixel;
                         self.display.set_pixel(pixel_index as usize, new_pixel);
                         self.display.set_pixel(pixel_index + 1, new_pixel);
@@ -293,11 +285,7 @@ impl<D: DisplayTrait> CPU<D> {
                         vf_changed = vf_changed || (old_pixel & new_pixel) != old_pixel;
                     }
                     vy += 1;
-                    self.v[0xF] = if vf_changed {
-                        1
-                    } else {
-                        0
-                    };
+                    self.v[0xF] = if vf_changed { 1 } else { 0 };
                 }
                 self.increment_pc();
                 Instruction::Display
@@ -305,37 +293,21 @@ impl<D: DisplayTrait> CPU<D> {
             0xE => {
                 match rhs {
                     0x9E => {
-                        /*let x = Self::get_rightmost_nibble(lhs);
-                        let (key, _) = KEYS.iter()
-                                               .find(|(_, v)| *v == self.v[x as usize])
-                                               .unwrap();
-                        let key_pressed = self.keyboard.key_state.iter()
-                                               .find(|(k, _)| k == key)
-                                               .map(|(_, v)| *v)
-                                               .unwrap();
-                        if key_pressed {
+                        let x = Self::get_rightmost_nibble(lhs);
+                        if self.keyboard.is_pressed(self.v[x as usize]) {
                             self.skip_next_instruction();
                         } else {
                             self.increment_pc();
-                        }*/
-                        self.increment_pc();
+                        }
                         Instruction::SKP
                     }
                     0xA1 => {
-                        /*let x = Self::get_rightmost_nibble(lhs);
-                        let (key, _) = KEYS.iter()
-                                               .find(|(_, v)| *v == self.v[x as usize])
-                                               .unwrap();
-                        let key_pressed = self.keyboard.key_state.iter()
-                                               .find(|(k, _)| k == key)
-                                               .map(|(_, v)| *v)
-                                               .unwrap();
-                        if !key_pressed {
+                        let x = Self::get_rightmost_nibble(lhs);
+                        if !self.keyboard.is_pressed(self.v[x as usize]) {
                             self.skip_next_instruction();
                         } else {
                             self.increment_pc();
-                        }*/
-                        self.skip_next_instruction();
+                        }
                         Instruction::SKNP
                     }
                     _ => {
@@ -352,43 +324,23 @@ impl<D: DisplayTrait> CPU<D> {
                         Instruction::Load
                     }
                     0xA => {
-                        /*loop {
-                            for event in self.display.event_pump.poll_iter() {
-                                match event {
-                                    Event::KeyDown { keycode: Some(key), .. } => {
-                                        let x = Self::get_leftmost_nibble(lhs); 
-                                        self.v[x as usize] = map_key_to_u8(key).unwrap();
-                                        let _ = self.keyboard.key_state.iter_mut()
-                                            .map(|k| {
-                                                if k.0 == key {
-                                                    k.1 = true;
-                                                }
-                                            });
-                                        self.increment_pc();
-                                        return Instruction::Load;
-                                    },
-                                    _ => {
-                                        unimplemented!("UNIMPLEMENTED OPCODE: {:X?}", op)
-                                    }
-                                }
-                            }
-                        }*/
-                                    return Instruction::Load;
+                        self.waiting_key = true;
+                        return Instruction::Load;
                     }
                     0x15 => {
-                        let x = Self::get_rightmost_nibble(lhs); 
+                        let x = Self::get_rightmost_nibble(lhs);
                         self.dt = self.v[x as usize];
                         self.increment_pc();
                         Instruction::Load
                     }
                     0x18 => {
-                        let x = Self::get_rightmost_nibble(lhs); 
+                        let x = Self::get_rightmost_nibble(lhs);
                         self.st = self.v[x as usize];
                         self.increment_pc();
                         Instruction::Load
                     }
                     0x1E => {
-                        let x = Self::get_rightmost_nibble(lhs); 
+                        let x = Self::get_rightmost_nibble(lhs);
                         self.i += self.v[x as usize] as u16;
                         self.increment_pc();
                         Instruction::Add
@@ -400,7 +352,7 @@ impl<D: DisplayTrait> CPU<D> {
                         Instruction::Load
                     }
                     0x33 => {
-                        let x = Self::get_rightmost_nibble(lhs); 
+                        let x = Self::get_rightmost_nibble(lhs);
                         self.memory.memory[(self.i + 2) as usize] = self.v[x as usize] % 10;
                         self.memory.memory[(self.i + 1) as usize] = (self.v[x as usize] / 10) % 10;
                         self.memory.memory[self.i as usize] = (self.v[x as usize] / 100) % 10;
@@ -408,26 +360,28 @@ impl<D: DisplayTrait> CPU<D> {
                         Instruction::Load
                     }
                     0x55 => {
-                        let x = Self::get_rightmost_nibble(lhs); 
-                        self.v.iter()
-                              .take(x as usize + 1)
-                              .enumerate()
-                              .for_each(|(i, n)| {
-                                  self.memory.memory[i + self.i as usize] = *n;
-                              });
+                        let x = Self::get_rightmost_nibble(lhs);
+                        self.v
+                            .iter()
+                            .take(x as usize + 1)
+                            .enumerate()
+                            .for_each(|(i, n)| {
+                                self.memory.memory[i + self.i as usize] = *n;
+                            });
                         self.increment_pc();
                         Instruction::Load
                     }
                     0x65 => {
-                        let x = Self::get_rightmost_nibble(lhs); 
-                        self.memory.memory
-                                   .iter()
-                                   .skip(self.i as usize)
-                                   .take(x as usize + 1)
-                                   .enumerate()
-                                   .for_each(|(index, n)| {
-                                       self.v[index] = *n;
-                                   });
+                        let x = Self::get_rightmost_nibble(lhs);
+                        self.memory
+                            .memory
+                            .iter()
+                            .skip(self.i as usize)
+                            .take(x as usize + 1)
+                            .enumerate()
+                            .for_each(|(index, n)| {
+                                self.v[index] = *n;
+                            });
                         self.increment_pc();
                         Instruction::Load
                     }
@@ -445,7 +399,7 @@ impl<D: DisplayTrait> CPU<D> {
         n & 0x0F
     }
     fn get_leftmost_nibble(n: u8) -> u8 {
-        n >> 4 
+        n >> 4
     }
     fn increment_pc(&mut self) {
         self.pc += 2;
@@ -468,11 +422,13 @@ mod tests {
             [0; WIDTH * HEIGHT * 3]
         }
         fn set_pixels(&mut self, value: [u8; WIDTH * HEIGHT * 3]) {}
-        fn get_pixel(&self, _index: usize) -> u8 {0}
+        fn get_pixel(&self, _index: usize) -> u8 {
+            0
+        }
         fn set_pixel(&mut self, _index: usize, value: u8) {}
     }
     fn cpu() -> CPU<FakeDisplay> {
-        CPU::new(Memory::new(), FakeDisplay{}, Keyboard::default())
+        CPU::new(Memory::new(), FakeDisplay {}, Keyboard::default())
     }
     #[test]
     // 00EE - RET
@@ -627,7 +583,7 @@ mod tests {
     #[test]
     // 8xy6 - SHR Vx {, Vy}
     fn should_shift_right_vx() {
-        let mut cpu = cpu();    
+        let mut cpu = cpu();
         let x = 0xA;
         let y = 0x2;
         cpu.v[x] = 1;
@@ -636,7 +592,7 @@ mod tests {
         assert_eq!(cpu.v[0xF], 1);
         assert_eq!(cpu.v[x], 0);
     }
-     #[test]
+    #[test]
     // 8xy7 - SUBN Vx, Vy
     fn should_subtract_vx_if_vy_greater() {
         let mut cpu = cpu();
@@ -659,7 +615,7 @@ mod tests {
         assert_eq!(cpu.v[x], 0x02);
     }
     #[test]
-    // 9xy0 - SNE Vx, Vy 
+    // 9xy0 - SNE Vx, Vy
     fn skip_if_vx_ne_vy() {
         let mut cpu = cpu();
         let x = 0xA;
@@ -732,7 +688,7 @@ mod tests {
         let mut cpu = cpu();
         cpu.v[5] = 152;
         cpu.decode(0xF5, 0x33);
-        assert_eq!(cpu.memory.memory[cpu.i as usize] , 1);
+        assert_eq!(cpu.memory.memory[cpu.i as usize], 1);
         assert_eq!(cpu.memory.memory[cpu.i as usize + 1], 5);
         assert_eq!(cpu.memory.memory[cpu.i as usize + 2], 2);
     }

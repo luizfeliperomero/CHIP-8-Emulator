@@ -1,47 +1,75 @@
 use sdl2::keyboard::Keycode;
+use sdl2::{Sdl, EventPump};
+use sdl2::event::Event;
 
-pub const KEYS: [(Keycode, u8); 16] = [
-    (Keycode::Num1, 0x1),
-    (Keycode::Num2, 0x2),
-    (Keycode::Num3, 0x3),
-    (Keycode::Num4, 0xC),
-    (Keycode::Q, 0x4),
-    (Keycode::W, 0x5),
-    (Keycode::E, 0x6),
-    (Keycode::R, 0xD),
-    (Keycode::A, 0x7),
-    (Keycode::S, 0x8),
-    (Keycode::D, 0x9),
-    (Keycode::F, 0xE),
-    (Keycode::Z, 0xA),
-    (Keycode::X, 0x0),
-    (Keycode::C, 0xB),
-    (Keycode::V, 0xF),
+pub const KEYS: [Keycode; 16] = [
+    Keycode::X,
+    Keycode::Num1,
+    Keycode::Num2,
+    Keycode::Num3,
+    Keycode::Q,
+    Keycode::W,
+    Keycode::E,
+    Keycode::A,
+    Keycode::S,
+    Keycode::D,
+    Keycode::Z,
+    Keycode::C,
+    Keycode::Num4,
+    Keycode::R,
+    Keycode::F,
+    Keycode::V,
 ];
-
 pub struct Keyboard {
-    pub key_state: [(Keycode, bool); 16]
+    keys_state: u16,
 }
 
-impl Default for Keyboard {
-    fn default() -> Self {
-        let mut key_state = [(Keycode::Num1, false); 16];
-        KEYS.iter()
-            .enumerate()
-            .for_each(|(i, (k, _))| {
-               key_state[i].0 = *k;
-            });
-        Self {
-            key_state
+impl Keyboard {
+    pub fn new() -> Self {
+        Self { 
+            keys_state: 0,
         }
+    }
+}
+
+impl Keyboard {
+    pub fn is_pressed(&self, key: u8) -> bool {
+        self.keys_state & (1 << key) == 1 << key
+    }
+    pub fn press(&mut self, key: u8) {
+        self.keys_state |= 1 << key;
+    }
+    pub fn release(&mut self, key: u8) {
+        self.keys_state &= !(1 << key);
+    }
+    pub fn update(&mut self, sdl_context: &Sdl) {
+            let mut event_pump = sdl_context.event_pump().unwrap();
+            for event in event_pump.poll_iter() {
+                match event {
+                    Event::KeyDown {keycode, ..} => {
+                        self.press(map_key_to_u8(keycode.expect("Invalid Keycode")).unwrap());
+                    },
+                    Event::KeyUp {keycode, ..} => {
+                        self.release(map_key_to_u8(keycode.expect("Invalid Keycode")).unwrap());
+                    },
+                    _ => {}
+                }
+            }
+    }
+    pub fn is_any_pressed(&self) -> bool {
+       self.keys_state != 0 
     }
 }
 
 pub fn map_key_to_u8(key: Keycode) -> Option<u8> {
-    for (keycode, value) in KEYS.iter() {
-        if *keycode == key {
-            return Some(*value);
-        }
-    }
-    None
+    KEYS.iter()
+        .enumerate()
+        .find_map(|(i, k)| {
+            if *k == key {
+                Some(i)
+            } else {
+                None
+            }
+        })
+        .map(|i| i as u8)
 }

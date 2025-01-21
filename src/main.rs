@@ -1,11 +1,11 @@
-mod memory;
 mod cpu;
 mod display;
 mod keyboard;
-use memory::Memory;
+mod memory;
 use cpu::CPU;
 use display::Display;
 use keyboard::Keyboard;
+use memory::Memory;
 
 fn main() {
     let mut memory = Memory::new();
@@ -18,8 +18,9 @@ fn main() {
             panic!("{e}: {rom}");
         }
     }
-    let display = Display::default();
-    let keyboard = Keyboard::default();
+    let sdl_context = sdl2::init().unwrap();
+    let display = Display::new(&sdl_context);
+    let keyboard = Keyboard::new();
     let mut cpu = CPU::new(memory, display, keyboard);
-    cpu.run();
+    cpu.run(&sdl_context);
 }
