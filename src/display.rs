@@ -30,7 +30,7 @@ impl Display {
         let title = "CHIP-8 Emulator".to_string();
         let video_subsystem = sdl_context.video().unwrap();
         let window = video_subsystem
-            .window(title.as_str(), WIDTH as u32 * 10, HEIGHT as u32* 10)
+            .window(title.as_str(), WIDTH as u32 * 10, HEIGHT as u32 * 10)
             .position_centered()
             .build()
             .unwrap();
@@ -48,7 +48,6 @@ impl DisplayTrait for Display {
     fn draw(&mut self) -> bool {
         let now = Instant::now();
         if now.duration_since(self.last_updated) >= Duration::from_millis(1000 / FPS) {
-            self.canvas.clear();
             let texture_creator = self.canvas.texture_creator();
             let mut texture = texture_creator
                 .create_texture_streaming(PixelFormatEnum::RGB24, WIDTH as u32, HEIGHT as u32)

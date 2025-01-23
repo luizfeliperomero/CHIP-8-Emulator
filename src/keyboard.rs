@@ -1,6 +1,6 @@
-use sdl2::keyboard::Keycode;
-use sdl2::{Sdl, EventPump};
 use sdl2::event::Event;
+use sdl2::keyboard::Keycode;
+use sdl2::{EventPump, Sdl};
 
 pub const KEYS: [Keycode; 16] = [
     Keycode::X,
@@ -26,9 +26,7 @@ pub struct Keyboard {
 
 impl Keyboard {
     pub fn new() -> Self {
-        Self { 
-            keys_state: 0,
-        }
+        Self { keys_state: 0 }
     }
 }
 
@@ -43,33 +41,35 @@ impl Keyboard {
         self.keys_state &= !(1 << key);
     }
     pub fn update(&mut self, sdl_context: &Sdl) {
-            let mut event_pump = sdl_context.event_pump().unwrap();
-            for event in event_pump.poll_iter() {
-                match event {
-                    Event::KeyDown {keycode, ..} => {
-                        self.press(map_key_to_u8(keycode.expect("Invalid Keycode")).unwrap());
-                    },
-                    Event::KeyUp {keycode, ..} => {
-                        self.release(map_key_to_u8(keycode.expect("Invalid Keycode")).unwrap());
-                    },
-                    _ => {}
+        let mut event_pump = sdl_context.event_pump().unwrap();
+        for event in event_pump.poll_iter() {
+            match event {
+                Event::KeyDown { keycode, .. } => {
+                    if let Some(key) = keycode {
+                        if let Some(key_num) = map_key_to_u8(key) {
+                            self.press(key_num);
+                        }
+                    }
                 }
+                Event::KeyUp { keycode, .. } => {
+                    if let Some(key) = keycode {
+                        if let Some(key_num) = map_key_to_u8(key) {
+                            self.release(key_num);
+                        }
+                    }
+                }
+                _ => {}
             }
+        }
     }
     pub fn is_any_pressed(&self) -> bool {
-       self.keys_state != 0 
+        self.keys_state != 0
     }
 }
 
 pub fn map_key_to_u8(key: Keycode) -> Option<u8> {
     KEYS.iter()
         .enumerate()
-        .find_map(|(i, k)| {
-            if *k == key {
-                Some(i)
-            } else {
-                None
-            }
-        })
+        .find_map(|(i, k)| if *k == key { Some(i) } else { None })
         .map(|i| i as u8)
 }

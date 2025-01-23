@@ -83,8 +83,13 @@ impl<D: DisplayTrait> CPU<D> {
                     Instruction::CLS
                 }
                 0xEE => {
-                    self.pc = self.memory.stack[self.sp as usize];
+                    // TODO (luizf): Different from Cowgod's reference
+                    if self.sp == 0 {
+                        panic!("Stack Underflow!")
+                    }
                     self.sp -= 1;
+                    self.pc = self.memory.stack[self.sp as usize];
+                    self.increment_pc();
                     Instruction::RET
                 }
                 _ => {
@@ -97,9 +102,13 @@ impl<D: DisplayTrait> CPU<D> {
                 Instruction::Jump(address)
             }
             0x2 => {
+                // TODO (luizf): Different from Cowgod's reference
                 let address = (((Self::get_rightmost_nibble(lhs)) as u16) << 8) | rhs as u16;
-                self.sp += 1;
+                if self.sp == 15 {
+                    panic!("Stack Overflow!")
+                }
                 self.memory.stack[self.sp as usize] = self.pc;
+                self.sp += 1;
                 self.pc = address;
                 Instruction::Call
             }
@@ -139,7 +148,8 @@ impl<D: DisplayTrait> CPU<D> {
             }
             0x7 => {
                 let x = Self::get_rightmost_nibble(lhs);
-                self.v[x as usize] += rhs;
+                // TODO (luizf): Potentially incorrect code
+                self.v[x as usize] = self.v[x as usize].wrapping_add(rhs);
                 self.increment_pc();
                 Instruction::Add
             }
@@ -260,21 +270,20 @@ impl<D: DisplayTrait> CPU<D> {
                 let x = Self::get_rightmost_nibble(lhs);
                 let y = Self::get_leftmost_nibble(rhs);
                 let mut vy = self.v[y as usize];
+                let mut vf_changed = false;
                 for sprite_index in self.i..(self.i + n as u16) {
                     let start_index: usize = sprite_index as usize;
-                    let mut vf_changed = false;
-                    if vy as usize > HEIGHT {
+                    if vy as usize >= HEIGHT {
                         vy = 0;
                     }
                     let sprite_row = self.memory.memory[start_index];
-                    let mut vx = self.v[x as usize];
-                    if vx as usize > WIDTH {
-                        vx = 0;
-                    }
                     for b in 0..8 {
+                        let mut vx = self.v[x as usize];
+                        if vx as usize + b as usize >= WIDTH {
+                            vx = 0;
+                        }
                         let pixel_index: usize =
                             ((vy as usize * WIDTH * 3) + ((vx as usize + b) * 3)) as usize;
-                        assert_eq!(pixel_index % 3, 0);
                         let old_pixel = self.display.get_pixel(pixel_index);
                         let new_pixel = sprite_row & (0b1000_0000 >> b);
                         let new_pixel = if new_pixel != 0 { 0xFF } else { 0x00 };
@@ -285,111 +294,107 @@ impl<D: DisplayTrait> CPU<D> {
                         vf_changed = vf_changed || (old_pixel & new_pixel) != old_pixel;
                     }
                     vy += 1;
-                    self.v[0xF] = if vf_changed { 1 } else { 0 };
                 }
+                self.v[0xF] = if vf_changed { 1 } else { 0 };
                 self.increment_pc();
                 Instruction::Display
             }
-            0xE => {
-                match rhs {
-                    0x9E => {
-                        let x = Self::get_rightmost_nibble(lhs);
-                        if self.keyboard.is_pressed(self.v[x as usize]) {
-                            self.skip_next_instruction();
-                        } else {
-                            self.increment_pc();
-                        }
-                        Instruction::SKP
+            0xE => match rhs {
+                0x9E => {
+                    let x = Self::get_rightmost_nibble(lhs);
+                    if self.keyboard.is_pressed(self.v[x as usize]) {
+                        self.skip_next_instruction();
+                    } else {
+                        self.increment_pc();
                     }
-                    0xA1 => {
-                        let x = Self::get_rightmost_nibble(lhs);
-                        if !self.keyboard.is_pressed(self.v[x as usize]) {
-                            self.skip_next_instruction();
-                        } else {
-                            self.increment_pc();
-                        }
-                        Instruction::SKNP
-                    }
-                    _ => {
-                        unimplemented!("Unimplemented E")
-                    }
+                    Instruction::SKP
                 }
-            }
-            0xF => {
-                match rhs {
-                    0x7 => {
-                        let x = Self::get_rightmost_nibble(lhs);
-                        self.v[x as usize] = self.dt;
+                0xA1 => {
+                    let x = Self::get_rightmost_nibble(lhs);
+                    if !self.keyboard.is_pressed(self.v[x as usize]) {
+                        self.skip_next_instruction();
+                    } else {
                         self.increment_pc();
-                        Instruction::Load
                     }
-                    0xA => {
-                        self.waiting_key = true;
-                        return Instruction::Load;
-                    }
-                    0x15 => {
-                        let x = Self::get_rightmost_nibble(lhs);
-                        self.dt = self.v[x as usize];
-                        self.increment_pc();
-                        Instruction::Load
-                    }
-                    0x18 => {
-                        let x = Self::get_rightmost_nibble(lhs);
-                        self.st = self.v[x as usize];
-                        self.increment_pc();
-                        Instruction::Load
-                    }
-                    0x1E => {
-                        let x = Self::get_rightmost_nibble(lhs);
-                        self.i += self.v[x as usize] as u16;
-                        self.increment_pc();
-                        Instruction::Add
-                    }
-                    0x29 => {
-                        let x = Self::get_rightmost_nibble(lhs);
-                        self.i = self.v[x as usize] as u16 * 5;
-                        self.increment_pc();
-                        Instruction::Load
-                    }
-                    0x33 => {
-                        let x = Self::get_rightmost_nibble(lhs);
-                        self.memory.memory[(self.i + 2) as usize] = self.v[x as usize] % 10;
-                        self.memory.memory[(self.i + 1) as usize] = (self.v[x as usize] / 10) % 10;
-                        self.memory.memory[self.i as usize] = (self.v[x as usize] / 100) % 10;
-                        self.increment_pc();
-                        Instruction::Load
-                    }
-                    0x55 => {
-                        let x = Self::get_rightmost_nibble(lhs);
-                        self.v
-                            .iter()
-                            .take(x as usize + 1)
-                            .enumerate()
-                            .for_each(|(i, n)| {
-                                self.memory.memory[i + self.i as usize] = *n;
-                            });
-                        self.increment_pc();
-                        Instruction::Load
-                    }
-                    0x65 => {
-                        let x = Self::get_rightmost_nibble(lhs);
-                        self.memory
-                            .memory
-                            .iter()
-                            .skip(self.i as usize)
-                            .take(x as usize + 1)
-                            .enumerate()
-                            .for_each(|(index, n)| {
-                                self.v[index] = *n;
-                            });
-                        self.increment_pc();
-                        Instruction::Load
-                    }
-                    _ => {
-                        unimplemented!("UNIMPLEMENTED OPCODE: {:X?}", op)
-                    }
+                    Instruction::SKNP
                 }
-            }
+                _ => {
+                    unimplemented!("Unimplemented E")
+                }
+            },
+            0xF => match rhs {
+                0x7 => {
+                    let x = Self::get_rightmost_nibble(lhs);
+                    self.v[x as usize] = self.dt;
+                    self.increment_pc();
+                    Instruction::Load
+                }
+                0xA => {
+                    self.waiting_key = true;
+                    return Instruction::Load;
+                }
+                0x15 => {
+                    let x = Self::get_rightmost_nibble(lhs);
+                    self.dt = self.v[x as usize];
+                    self.increment_pc();
+                    Instruction::Load
+                }
+                0x18 => {
+                    let x = Self::get_rightmost_nibble(lhs);
+                    self.st = self.v[x as usize];
+                    self.increment_pc();
+                    Instruction::Load
+                }
+                0x1E => {
+                    let x = Self::get_rightmost_nibble(lhs);
+                    self.i += self.v[x as usize] as u16;
+                    self.increment_pc();
+                    Instruction::Add
+                }
+                0x29 => {
+                    let x = Self::get_rightmost_nibble(lhs);
+                    self.i = self.v[x as usize] as u16 * 5;
+                    self.increment_pc();
+                    Instruction::Load
+                }
+                0x33 => {
+                    let x = Self::get_rightmost_nibble(lhs);
+                    self.memory.memory[(self.i + 2) as usize] = self.v[x as usize] % 10;
+                    self.memory.memory[(self.i + 1) as usize] = (self.v[x as usize] / 10) % 10;
+                    self.memory.memory[self.i as usize] = (self.v[x as usize] / 100) % 10;
+                    self.increment_pc();
+                    Instruction::Load
+                }
+                0x55 => {
+                    let x = Self::get_rightmost_nibble(lhs);
+                    self.v
+                        .iter()
+                        .take(x as usize + 1)
+                        .enumerate()
+                        .for_each(|(i, n)| {
+                            self.memory.memory[i + self.i as usize] = *n;
+                        });
+                    self.increment_pc();
+                    Instruction::Load
+                }
+                0x65 => {
+                    let x = Self::get_rightmost_nibble(lhs);
+                    self.memory
+                        .memory
+                        .iter()
+                        .skip(self.i as usize)
+                        .take(x as usize + 1)
+                        .enumerate()
+                        .for_each(|(index, n)| {
+                            self.v[index] = *n;
+                        });
+                    self.increment_pc();
+                    Instruction::Load
+                }
+                _ => {
+                    unimplemented!("UNIMPLEMENTED OPCODE: {:X?}", op)
+                }
+            },
             _ => {
                 unimplemented!("UNIMPLEMENTED OPCODE: {:X?}", op)
             }
@@ -428,7 +433,7 @@ mod tests {
         fn set_pixel(&mut self, _index: usize, value: u8) {}
     }
     fn cpu() -> CPU<FakeDisplay> {
-        CPU::new(Memory::new(), FakeDisplay {}, Keyboard::default())
+        CPU::new(Memory::new(), FakeDisplay {}, Keyboard::new())
     }
     #[test]
     // 00EE - RET
