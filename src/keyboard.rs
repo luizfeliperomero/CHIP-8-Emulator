@@ -40,7 +40,7 @@ impl Keyboard {
     pub fn release(&mut self, key: u8) {
         self.keys_state &= !(1 << key);
     }
-    pub fn update(&mut self, sdl_context: &Sdl) {
+    pub fn update(&mut self, sdl_context: &Sdl) -> bool {
         let mut event_pump = sdl_context.event_pump().unwrap();
         for event in event_pump.poll_iter() {
             match event {
@@ -58,9 +58,13 @@ impl Keyboard {
                         }
                     }
                 }
+                Event::Quit {..} => {
+                    return true;
+                }
                 _ => {}
             }
         }
+        false
     }
     pub fn is_any_pressed(&self) -> bool {
         self.keys_state != 0

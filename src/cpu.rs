@@ -1,12 +1,17 @@
+use crate::debugger::{DebuggerAction, ShowArgs};
 use crate::display::DisplayTrait;
 use crate::display::HEIGHT;
 use crate::display::WIDTH;
 use crate::keyboard::{map_key_to_u8, Keyboard, KEYS};
 use crate::memory::Memory;
-use sdl2::Sdl;
 use rand::Rng;
+use rodio::{source::SineWave, OutputStream, Sink};
 use sdl2;
 use sdl2::event::Event;
+use sdl2::Sdl;
+use std::io::{self, Write};
+use std::str::FromStr;
+use colored::Colorize;
 
 #[derive(Debug)]
 enum Instruction {
@@ -41,7 +46,7 @@ pub struct CPU<D: DisplayTrait> {
     memory: Memory,
     display: D,
     keyboard: Keyboard,
-    waiting_key: bool
+    waiting_key: bool,
 }
 
 impl<D: DisplayTrait> CPU<D> {
@@ -59,18 +64,100 @@ impl<D: DisplayTrait> CPU<D> {
             waiting_key: false,
         }
     }
-    pub fn run(&mut self, sdl_context: &Sdl) {
+    pub fn run_debug(&mut self, sdl_context: &Sdl) {
+        let mut action = String::new();
         loop {
             self.keyboard.update(sdl_context);
-            if self.waiting_key && self.keyboard.is_any_pressed() {
-                self.increment_pc();
-                self.waiting_key = false;
+            let debugger_prefix = "(chip-8-debugger) ".purple().magenta();
+            print!("{debugger_prefix}");
+            io::stdout().flush().expect("Failed to flush stdout");
+            action.clear();
+            io::stdin()
+                .read_line(&mut action)
+                .expect("Failed to read line");
+            println!("");
+            match DebuggerAction::from_str(action.as_str()) { 
+                Ok(debugger_action) => {
+                    match debugger_action {
+                        DebuggerAction::Step => {
+                            println!("{:02X?}", self.cycle());
+                        },
+                        DebuggerAction::Show(arg) => match arg {
+                            ShowArgs::PC => {
+                                println!("{:02X?}", self.pc);
+                            },
+                            ShowArgs::Mem(addr)=> {
+                                println!("{:02X}", self.memory.memory[addr]);
+                            },
+                            ShowArgs::Stack(addr) => {
+                                println!("{:02X}", self.memory.stack[addr]);
+                            },
+                            ShowArgs::SP => {
+                                println!("{:02X?}", self.sp);
+                            },
+                            ShowArgs::V(n) => {
+                                println!("{:02X?}", self.v[n as usize]);
+                            },
+                            ShowArgs::I => {
+                                println!("{:02X?}", self.i);
+                            },
+                            ShowArgs::DT => {
+                                println!("{:02X?}", self.dt);
+                            },
+                            ShowArgs::ST => {
+                                println!("{:02X?}", self.st);
+                            },
+                            ShowArgs::WaitingKey => {
+                                println!("{:02X?}", self.waiting_key);
+                            },
+                        },
+                        DebuggerAction::Run => {
+                            loop {
+                                if self.keyboard.update(sdl_context) {
+                                    break;
+                                }
+                                if let Some(result) = self.cycle() {
+                                    println!("{:?}", result);
+                                }
+                            }
+                        },
+                        DebuggerAction::Quit => {
+                            break;
+                        }
+                    }
+                },
+                Err(s) => {
+                    println!("{s}");
+                }
             }
+            println!("");
+        }
+    }
+    fn cycle(&mut self) -> Option<(Instruction, String)> {
             if self.display.draw() {
+                if self.waiting_key && self.keyboard.is_any_pressed() {
+                    self.increment_pc();
+                    self.waiting_key = false;
+                }
                 let lhs = self.memory.memory[self.pc as usize];
                 let rhs = self.memory.memory[(self.pc + 1) as usize];
-                self.decode(lhs, rhs);
+                let instruction = self.decode(lhs, rhs);
+                if self.dt > 0 {
+                    self.decrement_dt();
+                }
+                if self.st > 0 {
+                    self.sound_timer();
+                }
+                return Some((instruction, format!("{:02X?}{:02X?}", lhs, rhs)));
             }
+            None
+    }
+    pub fn run(&mut self, sdl_context: &Sdl) {
+        loop {
+            if self.keyboard.update(sdl_context) {
+                break;
+            }
+            self.cycle();
         }
     }
     fn decode(&mut self, lhs: u8, rhs: u8) -> Instruction {
@@ -148,7 +235,6 @@ impl<D: DisplayTrait> CPU<D> {
             }
             0x7 => {
                 let x = Self::get_rightmost_nibble(lhs);
-                // TODO (luizf): Potentially incorrect code
                 self.v[x as usize] = self.v[x as usize].wrapping_add(rhs);
                 self.increment_pc();
                 Instruction::Add
@@ -412,6 +498,13 @@ impl<D: DisplayTrait> CPU<D> {
     fn skip_next_instruction(&mut self) {
         self.pc += 4;
     }
+    fn decrement_dt(&mut self) {
+        self.dt -= 1;
+    }
+    fn sound_timer(&mut self) {
+        self.st -= 1;
+        //TODO: (luizf) Implement sound
+    }
 }
 
 #[cfg(test)]
@@ -440,8 +533,9 @@ mod tests {
     fn test_stack_pop_updates_pc_and_sp() {
         let mut cpu = cpu();
         cpu.sp = 0xf;
+        cpu.memory.memory[0xE] = 0x2;
         cpu.decode(0x0, 0xEE);
-        assert_eq!(cpu.pc, cpu.memory.memory[0xf] as u16);
+        assert_eq!(cpu.pc, 0x2);
         assert_eq!(cpu.sp, 0xE);
     }
 
@@ -459,7 +553,7 @@ mod tests {
         cpu.sp = 1;
         cpu.pc = 0x200;
         cpu.decode(0x21, 0xAA);
-        assert_eq!(cpu.memory.stack[cpu.sp as usize], 0x200);
+        assert_eq!(cpu.memory.stack[1], 0x200);
         assert_eq!(cpu.sp, 2);
         assert_eq!(cpu.pc, 0x1AA);
     }
@@ -644,6 +738,24 @@ mod tests {
         let mut cpu = cpu();
         cpu.decode(0xB1, 0x42);
         assert_eq!(cpu.pc, 0x142);
+    }
+    #[test]
+    //Ex9E - SKP Vx
+    fn should_skip_on_key_press() {
+        let mut cpu = cpu();
+        cpu.v[6] = 1;
+        cpu.keyboard.press(1);
+        cpu.decode(0xE6, 0x9E);
+        assert_eq!(cpu.pc, 0x204);
+    }
+    #[test]
+    //ExA1 - SKNP Vx
+    fn should_not_skip_on_key_press() {
+        let mut cpu = cpu();
+        cpu.v[6] = 1;
+        cpu.keyboard.press(1);
+        cpu.decode(0xE6, 0xA1);
+        assert_eq!(cpu.pc, 0x202);
     }
     #[test]
     // Fx07 - LD Vx, DT

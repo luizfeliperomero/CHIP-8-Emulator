@@ -2,14 +2,24 @@ mod cpu;
 mod display;
 mod keyboard;
 mod memory;
+mod debugger;
 use cpu::CPU;
 use display::Display;
 use keyboard::Keyboard;
 use memory::Memory;
+use clap::Parser;
+
+#[derive(Parser, Debug)]
+#[command(version, about, long_about = None)]
+struct Args {
+    #[arg(short, long)]
+    debug: bool,
+}
 
 fn main() {
+    let args = Args::parse();
     let mut memory = Memory::new();
-    let rom = "roms/spaceinvaders.ch8";
+    let rom = "roms/tetris.ch8";
     match memory.load(rom) {
         Ok(_) => {
             //memory.display();
@@ -22,5 +32,9 @@ fn main() {
     let display = Display::new(&sdl_context);
     let keyboard = Keyboard::new();
     let mut cpu = CPU::new(memory, display, keyboard);
-    cpu.run(&sdl_context);
+    if args.debug {
+        cpu.run_debug(&sdl_context);
+    } else {
+        cpu.run(&sdl_context);
+    }
 }
