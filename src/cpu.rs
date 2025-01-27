@@ -11,6 +11,7 @@ use sdl2::event::Event;
 use sdl2::Sdl;
 use std::io::{self, Write};
 use std::str::FromStr;
+use std::time::{Duration, Instant};
 use colored::Colorize;
 
 #[derive(Debug)]
@@ -47,6 +48,8 @@ pub struct CPU<D: DisplayTrait> {
     display: D,
     keyboard: Keyboard,
     waiting_key: bool,
+    dt_start: Instant,
+    st_start: Instant
 }
 
 impl<D: DisplayTrait> CPU<D> {
@@ -62,6 +65,8 @@ impl<D: DisplayTrait> CPU<D> {
             display,
             keyboard,
             waiting_key: false,
+            dt_start: Instant::now(),
+            st_start: Instant::now(),
         }
     }
     pub fn run_debug(&mut self, sdl_context: &Sdl) {
@@ -134,30 +139,33 @@ impl<D: DisplayTrait> CPU<D> {
         }
     }
     fn cycle(&mut self) -> Option<(Instruction, String)> {
-            if self.display.draw() {
-                if self.waiting_key && self.keyboard.is_any_pressed() {
-                    self.increment_pc();
-                    self.waiting_key = false;
-                }
-                let lhs = self.memory.memory[self.pc as usize];
-                let rhs = self.memory.memory[(self.pc + 1) as usize];
-                let instruction = self.decode(lhs, rhs);
-                if self.dt > 0 {
-                    self.decrement_dt();
-                }
-                if self.st > 0 {
-                    self.sound_timer();
-                }
-                return Some((instruction, format!("{:02X?}{:02X?}", lhs, rhs)));
-            }
-            None
+        if self.waiting_key && self.keyboard.is_any_pressed() {
+            self.increment_pc();
+            self.waiting_key = false;
+        }
+        let lhs = self.memory.memory[self.pc as usize];
+        let rhs = self.memory.memory[(self.pc + 1) as usize];
+        let instruction = self.decode(lhs, rhs);
+        if self.dt > 0 && self.dt_start.elapsed() >= Duration::from_millis(1000/60) {
+            self.decrement_dt();
+            self.dt_start = Instant::now();
+        }
+        if self.st > 0 && self.st_start.elapsed() >= Duration::from_millis(1000/60) {
+            self.sound_timer();
+            self.st_start = Instant::now();
+        }
+        return Some((instruction, format!("{:02X?}{:02X?}", lhs, rhs)));
     }
     pub fn run(&mut self, sdl_context: &Sdl) {
+        let mut start = Instant::now();
         loop {
-            if self.keyboard.update(sdl_context) {
-                break;
-            }
-            self.cycle();
+            if start.elapsed() >= Duration::from_millis(1000/500){
+                if self.keyboard.update(sdl_context) {
+                    break;
+                }
+                self.cycle();
+                start = Instant::now();
+            } 
         }
     }
     fn decode(&mut self, lhs: u8, rhs: u8) -> Instruction {
@@ -167,10 +175,11 @@ impl<D: DisplayTrait> CPU<D> {
                 0xE0 => {
                     self.display.clear();
                     self.increment_pc();
+                    self.display.draw();
                     Instruction::CLS
                 }
                 0xEE => {
-                    // TODO (luizf): Different from Cowgod's reference
+                    // (luizf): Different from Cowgod's reference
                     if self.sp == 0 {
                         panic!("Stack Underflow!")
                     }
@@ -189,11 +198,11 @@ impl<D: DisplayTrait> CPU<D> {
                 Instruction::Jump(address)
             }
             0x2 => {
-                // TODO (luizf): Different from Cowgod's reference
-                let address = (((Self::get_rightmost_nibble(lhs)) as u16) << 8) | rhs as u16;
+                // (luizf): Different from Cowgod's reference
                 if self.sp == 15 {
                     panic!("Stack Overflow!")
                 }
+                let address = (((Self::get_rightmost_nibble(lhs)) as u16) << 8) | rhs as u16;
                 self.memory.stack[self.sp as usize] = self.pc;
                 self.sp += 1;
                 self.pc = address;
@@ -287,7 +296,7 @@ impl<D: DisplayTrait> CPU<D> {
                         } else {
                             0
                         };
-                        self.v[x as usize] -= self.v[y as usize];
+                        self.v[x as usize] = self.v[x as usize].wrapping_sub(self.v[y as usize]);
                         self.increment_pc();
                         Instruction::Sub
                     }
@@ -306,7 +315,7 @@ impl<D: DisplayTrait> CPU<D> {
                         } else {
                             0
                         };
-                        self.v[x as usize] = self.v[y as usize] - self.v[x as usize];
+                        self.v[x as usize] = self.v[y as usize].wrapping_sub(self.v[x as usize]);
                         self.increment_pc();
                         Instruction::SubN
                     }
@@ -383,6 +392,7 @@ impl<D: DisplayTrait> CPU<D> {
                 }
                 self.v[0xF] = if vf_changed { 1 } else { 0 };
                 self.increment_pc();
+                self.display.draw();
                 Instruction::Display
             }
             0xE => match rhs {

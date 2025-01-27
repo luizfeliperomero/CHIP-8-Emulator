@@ -47,7 +47,6 @@ impl Display {
 impl DisplayTrait for Display {
     fn draw(&mut self) -> bool {
         let now = Instant::now();
-        if now.duration_since(self.last_updated) >= Duration::from_millis(1000 / FPS) {
             let texture_creator = self.canvas.texture_creator();
             let mut texture = texture_creator
                 .create_texture_streaming(PixelFormatEnum::RGB24, WIDTH as u32, HEIGHT as u32)
@@ -55,10 +54,8 @@ impl DisplayTrait for Display {
             let _ = texture.update(None, &self.pixels, WIDTH * 3);
             let _ = self.canvas.copy(&texture, None, None);
             self.canvas.present();
-            self.last_updated = Instant::now();
+            self.last_updated = now;
             return true;
-        }
-        false
     }
     fn clear(&mut self) {
         self.pixels = [0; WIDTH * HEIGHT * 3];
