@@ -4,6 +4,7 @@ use crate::display::HEIGHT;
 use crate::display::WIDTH;
 use crate::keyboard::{map_key_to_u8, Keyboard, KEYS};
 use crate::memory::Memory;
+use colored::Colorize;
 use rand::Rng;
 use rodio::{source::SineWave, OutputStream, Sink};
 use sdl2;
@@ -12,7 +13,6 @@ use sdl2::Sdl;
 use std::io::{self, Write};
 use std::str::FromStr;
 use std::time::{Duration, Instant};
-use colored::Colorize;
 
 #[derive(Debug)]
 enum Instruction {
@@ -49,7 +49,7 @@ pub struct CPU<D: DisplayTrait> {
     keyboard: Keyboard,
     waiting_key: bool,
     dt_start: Instant,
-    st_start: Instant
+    st_start: Instant,
 }
 
 impl<D: DisplayTrait> CPU<D> {
@@ -81,54 +81,50 @@ impl<D: DisplayTrait> CPU<D> {
                 .read_line(&mut action)
                 .expect("Failed to read line");
             println!("");
-            match DebuggerAction::from_str(action.as_str()) { 
-                Ok(debugger_action) => {
-                    match debugger_action {
-                        DebuggerAction::Step => {
-                            println!("{:02X?}", self.cycle());
-                        },
-                        DebuggerAction::Show(arg) => match arg {
-                            ShowArgs::PC => {
-                                println!("{:02X?}", self.pc);
-                            },
-                            ShowArgs::Mem(addr)=> {
-                                println!("{:02X}", self.memory.memory[addr]);
-                            },
-                            ShowArgs::Stack(addr) => {
-                                println!("{:02X}", self.memory.stack[addr]);
-                            },
-                            ShowArgs::SP => {
-                                println!("{:02X?}", self.sp);
-                            },
-                            ShowArgs::V(n) => {
-                                println!("{:02X?}", self.v[n as usize]);
-                            },
-                            ShowArgs::I => {
-                                println!("{:02X?}", self.i);
-                            },
-                            ShowArgs::DT => {
-                                println!("{:02X?}", self.dt);
-                            },
-                            ShowArgs::ST => {
-                                println!("{:02X?}", self.st);
-                            },
-                            ShowArgs::WaitingKey => {
-                                println!("{:02X?}", self.waiting_key);
-                            },
-                        },
-                        DebuggerAction::Run => {
-                            loop {
-                                if self.keyboard.update(sdl_context) {
-                                    break;
-                                }
-                                if let Some(result) = self.cycle() {
-                                    println!("{:?}", result);
-                                }
-                            }
-                        },
-                        DebuggerAction::Quit => {
+            match DebuggerAction::from_str(action.as_str()) {
+                Ok(debugger_action) => match debugger_action {
+                    DebuggerAction::Step => {
+                        println!("{:02X?}", self.cycle());
+                    }
+                    DebuggerAction::Show(arg) => match arg {
+                        ShowArgs::PC => {
+                            println!("{:02X?}", self.pc);
+                        }
+                        ShowArgs::Mem(addr) => {
+                            println!("{:02X}", self.memory.memory[addr]);
+                        }
+                        ShowArgs::Stack(addr) => {
+                            println!("{:02X}", self.memory.stack[addr]);
+                        }
+                        ShowArgs::SP => {
+                            println!("{:02X?}", self.sp);
+                        }
+                        ShowArgs::V(n) => {
+                            println!("{:02X?}", self.v[n as usize]);
+                        }
+                        ShowArgs::I => {
+                            println!("{:02X?}", self.i);
+                        }
+                        ShowArgs::DT => {
+                            println!("{:02X?}", self.dt);
+                        }
+                        ShowArgs::ST => {
+                            println!("{:02X?}", self.st);
+                        }
+                        ShowArgs::WaitingKey => {
+                            println!("{:02X?}", self.waiting_key);
+                        }
+                    },
+                    DebuggerAction::Run => loop {
+                        if self.keyboard.update(sdl_context) {
                             break;
                         }
+                        if let Some(result) = self.cycle() {
+                            println!("{:?}", result);
+                        }
+                    },
+                    DebuggerAction::Quit => {
+                        break;
                     }
                 },
                 Err(s) => {
@@ -146,11 +142,11 @@ impl<D: DisplayTrait> CPU<D> {
         let lhs = self.memory.memory[self.pc as usize];
         let rhs = self.memory.memory[(self.pc + 1) as usize];
         let instruction = self.decode(lhs, rhs);
-        if self.dt > 0 && self.dt_start.elapsed() >= Duration::from_millis(1000/60) {
+        if self.dt > 0 && self.dt_start.elapsed() >= Duration::from_millis(1000 / 60) {
             self.decrement_dt();
             self.dt_start = Instant::now();
         }
-        if self.st > 0 && self.st_start.elapsed() >= Duration::from_millis(1000/60) {
+        if self.st > 0 && self.st_start.elapsed() >= Duration::from_millis(1000 / 60) {
             self.sound_timer();
             self.st_start = Instant::now();
         }
@@ -159,13 +155,13 @@ impl<D: DisplayTrait> CPU<D> {
     pub fn run(&mut self, sdl_context: &Sdl) {
         let mut start = Instant::now();
         loop {
-            if start.elapsed() >= Duration::from_millis(1000/500){
+            if start.elapsed() >= Duration::from_millis(1000 / 500) {
                 if self.keyboard.update(sdl_context) {
                     break;
                 }
                 self.cycle();
                 start = Instant::now();
-            } 
+            }
         }
     }
     fn decode(&mut self, lhs: u8, rhs: u8) -> Instruction {

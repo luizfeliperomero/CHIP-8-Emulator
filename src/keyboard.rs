@@ -58,7 +58,7 @@ impl Keyboard {
                         }
                     }
                 }
-                Event::Quit {..} => {
+                Event::Quit { .. } => {
                     return true;
                 }
                 _ => {}

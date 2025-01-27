@@ -1,13 +1,13 @@
 mod cpu;
+mod debugger;
 mod display;
 mod keyboard;
 mod memory;
-mod debugger;
+use clap::Parser;
 use cpu::CPU;
 use display::Display;
 use keyboard::Keyboard;
 use memory::Memory;
-use clap::Parser;
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]

@@ -47,15 +47,15 @@ impl Display {
 impl DisplayTrait for Display {
     fn draw(&mut self) -> bool {
         let now = Instant::now();
-            let texture_creator = self.canvas.texture_creator();
-            let mut texture = texture_creator
-                .create_texture_streaming(PixelFormatEnum::RGB24, WIDTH as u32, HEIGHT as u32)
-                .expect("Couldn't create texture");
-            let _ = texture.update(None, &self.pixels, WIDTH * 3);
-            let _ = self.canvas.copy(&texture, None, None);
-            self.canvas.present();
-            self.last_updated = now;
-            return true;
+        let texture_creator = self.canvas.texture_creator();
+        let mut texture = texture_creator
+            .create_texture_streaming(PixelFormatEnum::RGB24, WIDTH as u32, HEIGHT as u32)
+            .expect("Couldn't create texture");
+        let _ = texture.update(None, &self.pixels, WIDTH * 3);
+        let _ = self.canvas.copy(&texture, None, None);
+        self.canvas.present();
+        self.last_updated = now;
+        return true;
     }
     fn clear(&mut self) {
         self.pixels = [0; WIDTH * HEIGHT * 3];
