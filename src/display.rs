@@ -1,9 +1,9 @@
 use sdl2::pixels::PixelFormatEnum;
 use sdl2::render::Canvas;
-use sdl2::video::Window;
-use sdl2::EventPump;
+use sdl2::video::{Window, WindowContext};
 use sdl2::Sdl;
-use std::time::{Duration, Instant};
+use sdl2::render::TextureCreator;
+use std::time::Instant;
 
 pub const WIDTH: usize = 64;
 pub const HEIGHT: usize = 32;
@@ -23,6 +23,7 @@ pub struct Display {
     pixels: [u8; WIDTH * HEIGHT * 3],
     canvas: Canvas<Window>,
     pub last_updated: Instant,
+    texture_creator: TextureCreator<WindowContext>
 }
 
 impl Display {
@@ -35,11 +36,13 @@ impl Display {
             .build()
             .unwrap();
         let canvas = window.into_canvas().build().unwrap();
+        let texture_creator = canvas.texture_creator();
         Self {
             title,
             pixels: [0; WIDTH * HEIGHT * 3],
             canvas,
             last_updated: Instant::now(),
+            texture_creator
         }
     }
 }
@@ -47,8 +50,7 @@ impl Display {
 impl DisplayTrait for Display {
     fn draw(&mut self) -> bool {
         let now = Instant::now();
-        let texture_creator = self.canvas.texture_creator();
-        let mut texture = texture_creator
+        let mut texture = self.texture_creator
             .create_texture_streaming(PixelFormatEnum::RGB24, WIDTH as u32, HEIGHT as u32)
             .expect("Couldn't create texture");
         let _ = texture.update(None, &self.pixels, WIDTH * 3);
