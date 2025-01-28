@@ -1,4 +1,4 @@
-use crate::debugger::{DebuggerAction, ShowArgs};
+use crate::debugger::{DebuggerAction, ShowArgs, HELP_MESSAGE};
 use crate::display::DisplayTrait;
 use crate::display::HEIGHT;
 use crate::display::WIDTH;
@@ -129,6 +129,9 @@ impl<D: DisplayTrait> CPU<D> {
                     },
                     DebuggerAction::Quit => {
                         break;
+                    }
+                    DebuggerAction::Help => {
+                        println!("{HELP_MESSAGE}");
                     }
                 },
                 Err(s) => {
