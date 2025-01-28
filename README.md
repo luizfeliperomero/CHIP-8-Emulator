@@ -12,4 +12,4 @@ cargo run -- --debug
 ```
 Once you ran in debug mode, you can type ***help*** to see the available commands.
 ## References
-[Cowgod's Chip-8 Technical Reference]=(http://devernay.free.fr/hacks/chip8/C8TECH10.HTM#keyboard)
+[Cowgod's Chip-8 Technical Reference]=(http://devernay.free.fr/hacks/chip8/C8TECH10.HTM)
