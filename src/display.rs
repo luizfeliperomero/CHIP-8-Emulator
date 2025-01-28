@@ -28,7 +28,7 @@ pub struct Display {
 
 impl Display {
     pub fn new(sdl_context: &Sdl) -> Self {
-        let title = "CHIP-8 Emulator".to_string();
+        let title = "CHIP-8 Emulator by luizf".to_string();
         let video_subsystem = sdl_context.video().unwrap();
         let window = video_subsystem
             .window(title.as_str(), WIDTH as u32 * 10, HEIGHT as u32 * 10)
