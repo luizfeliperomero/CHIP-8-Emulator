@@ -7,7 +7,7 @@ General Commands:
 - `step`: Execute a single CPU cycle and print the current cycle state.
   Example: step
 
-- `run`: Run the emulator continuously at 500 Hz (2 ms per cycle). Exit the loop when a key is pressed.
+- `run`: Run the emulator continuously at 500 Hz (2 ms per cycle). Exit the loop as if you were closing the window.
   Example: run
 
 - `quit`: Exit the debugger and stop the emulator.
