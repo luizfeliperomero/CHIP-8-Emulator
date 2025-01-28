@@ -115,12 +115,16 @@ impl<D: DisplayTrait> CPU<D> {
                             println!("{:02X?}", self.waiting_key);
                         }
                     },
-                    DebuggerAction::Run => loop {
-                        if self.keyboard.update(sdl_context) {
-                            break;
-                        }
-                        if let Some(result) = self.cycle() {
-                            println!("{:?}", result);
+                    DebuggerAction::Run => {
+                        let mut start = Instant::now();
+                        loop {
+                            if start.elapsed() >= Duration::from_millis(1000 / 500) {
+                                if self.keyboard.update(sdl_context) {
+                                    break;
+                                }
+                                println!("{:?}", self.cycle());
+                                start = Instant::now();
+                            }
                         }
                     },
                     DebuggerAction::Quit => {
@@ -134,7 +138,7 @@ impl<D: DisplayTrait> CPU<D> {
             println!("");
         }
     }
-    fn cycle(&mut self) -> Option<(Instruction, String)> {
+    fn cycle(&mut self) -> (Instruction, String) {
         if self.waiting_key && self.keyboard.is_any_pressed() {
             self.increment_pc();
             self.waiting_key = false;
