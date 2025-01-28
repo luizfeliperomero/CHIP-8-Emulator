@@ -151,10 +151,11 @@ impl<D: DisplayTrait> CPU<D> {
             self.dt_start = Instant::now();
         }
         if self.st > 0 && self.st_start.elapsed() >= Duration::from_millis(1000 / 60) {
-            self.sound_timer();
+            // TODO (luizf): Implement sound
+            self.decrement_st();
             self.st_start = Instant::now();
         }
-        return Some((instruction, format!("{:02X?}{:02X?}", lhs, rhs)));
+        return (instruction, format!("{:02X?}{:02X?}", lhs, rhs));
     }
     pub fn run(&mut self, sdl_context: &Sdl) {
         let mut start = Instant::now();
@@ -511,9 +512,8 @@ impl<D: DisplayTrait> CPU<D> {
     fn decrement_dt(&mut self) {
         self.dt -= 1;
     }
-    fn sound_timer(&mut self) {
+    fn decrement_st(&mut self) {
         self.st -= 1;
-        //TODO: (luizf) Implement sound
     }
 }
 
