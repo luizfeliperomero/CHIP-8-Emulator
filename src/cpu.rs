@@ -383,13 +383,13 @@ impl<D: DisplayTrait> CPU<D> {
                         }
                         let pixel_index: usize =
                             ((vy as usize * WIDTH * 3) + ((vx as usize + b) * 3)) as usize;
-                        let old_pixel = self.display.get_pixel(pixel_index);
+                        let old_pixel = self.display.get_pixel_byte(pixel_index);
                         let new_pixel = sprite_row & (0b1000_0000 >> b);
                         let new_pixel = if new_pixel != 0 { 0xFF } else { 0x00 };
                         let new_pixel = new_pixel ^ old_pixel;
-                        self.display.set_pixel(pixel_index as usize, new_pixel);
-                        self.display.set_pixel(pixel_index + 1, new_pixel);
-                        self.display.set_pixel(pixel_index + 2, new_pixel);
+                        self.display.set_pixel_byte(pixel_index as usize, new_pixel);
+                        self.display.set_pixel_byte(pixel_index + 1, new_pixel);
+                        self.display.set_pixel_byte(pixel_index + 2, new_pixel);
                         vf_changed = vf_changed || (old_pixel & new_pixel) != old_pixel;
                     }
                     vy += 1;
@@ -533,10 +533,10 @@ mod tests {
             [0; WIDTH * HEIGHT * 3]
         }
         fn set_pixels(&mut self, value: [u8; WIDTH * HEIGHT * 3]) {}
-        fn get_pixel(&self, _index: usize) -> u8 {
+        fn get_pixel_byte(&self, _index: usize) -> u8 {
             0
         }
-        fn set_pixel(&mut self, _index: usize, value: u8) {}
+        fn set_pixel_byte(&mut self, _index: usize, value: u8) {}
     }
     fn cpu() -> CPU<FakeDisplay> {
         CPU::new(Memory::new(), FakeDisplay {}, Keyboard::new())

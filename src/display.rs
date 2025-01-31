@@ -14,8 +14,8 @@ pub trait DisplayTrait {
     fn clear(&mut self);
     fn get_pixels(&self) -> [u8; WIDTH * HEIGHT * 3];
     fn set_pixels(&mut self, value: [u8; WIDTH * HEIGHT * 3]);
-    fn get_pixel(&self, index: usize) -> u8;
-    fn set_pixel(&mut self, index: usize, value: u8);
+    fn get_pixel_byte(&self, index: usize) -> u8;
+    fn set_pixel_byte(&mut self, index: usize, value: u8);
 }
 
 pub struct Display {
@@ -68,10 +68,10 @@ impl DisplayTrait for Display {
     fn set_pixels(&mut self, value: [u8; WIDTH * HEIGHT * 3]) {
         self.pixels = value;
     }
-    fn get_pixel(&self, index: usize) -> u8 {
+    fn get_pixel_byte(&self, index: usize) -> u8 {
         self.pixels[index]
     }
-    fn set_pixel(&mut self, index: usize, value: u8) {
+    fn set_pixel_byte(&mut self, index: usize, value: u8) {
         self.pixels[index] = value;
     }
 }
