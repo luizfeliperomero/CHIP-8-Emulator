@@ -2,13 +2,12 @@ use crate::debugger::{DebuggerAction, ShowArgs, HELP_MESSAGE};
 use crate::display::DisplayTrait;
 use crate::display::HEIGHT;
 use crate::display::WIDTH;
-use crate::keyboard::{map_key_to_u8, Keyboard, KEYS};
+use crate::keyboard::Keyboard;
 use crate::memory::Memory;
 use colored::Colorize;
 use rand::Rng;
-use rodio::{source::SineWave, OutputStream, Sink};
+use rodio::{source::SineWave, OutputStreamHandle, OutputStream, Sink};
 use sdl2;
-use sdl2::event::Event;
 use sdl2::Sdl;
 use std::io::{self, Write};
 use std::str::FromStr;
@@ -50,10 +49,17 @@ pub struct CPU<D: DisplayTrait> {
     waiting_key: bool,
     dt_start: Instant,
     st_start: Instant,
+    output_stream: OutputStream,
+    output_stream_handle: OutputStreamHandle,
+    sink: Sink,
 }
 
 impl<D: DisplayTrait> CPU<D> {
     pub fn new(memory: Memory, display: D, keyboard: Keyboard) -> Self {
+        let (output_stream, output_stream_handle) = OutputStream::try_default().unwrap();
+        let sink = Sink::try_new(&output_stream_handle).unwrap();
+        sink.append(SineWave::new(440.0));
+        sink.pause();
         Self {
             v: [0; 16],
             i: 0,
@@ -67,6 +73,9 @@ impl<D: DisplayTrait> CPU<D> {
             waiting_key: false,
             dt_start: Instant::now(),
             st_start: Instant::now(),
+            output_stream,
+            output_stream_handle ,
+            sink
         }
     }
     pub fn run_debug(&mut self, sdl_context: &Sdl) {
@@ -517,6 +526,11 @@ impl<D: DisplayTrait> CPU<D> {
     }
     fn decrement_st(&mut self) {
         self.st -= 1;
+        if self.st > 0 {
+            self.sink.play();
+        } else {
+            self.sink.pause();
+        }
     }
 }
 
